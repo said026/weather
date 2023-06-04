@@ -2,8 +2,14 @@ use clap::Parser;
 use dotenv;
 use reqwest::{self, Error};
 
+use crate::data::current_weather::CurrentWeather;
+use crate::data::forecast_weather::ForecastWeather;
+
+mod data;
+
 const LAT: f32 = 48.8;
 const LON: f32 = 2.3;
+const OWM_URL: &str = "https://api.openweathermap.org/data/2.5";
 
 #[derive(Parser)]
 #[command(name = "weather")]
@@ -14,13 +20,12 @@ struct Args {
     days: u8,
 }
 
-fn main() -> Result<(), Error> {
+fn main() {
     dotenv::dotenv().unwrap();
 
     let mut api_key = None;
     for (key, value) in std::env::vars() {
         if key == "API_KEY" {
-            println!("{value}");
             api_key = Some(value);
         }
     }
@@ -31,19 +36,35 @@ fn main() -> Result<(), Error> {
 
     let api_key = api_key.unwrap();
 
-    let url = format!(
-        "https://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={api_key}&units=metric"
+    let args = Args::parse();
+
+    let result = match args.days {
+        0 => current_weather(LAT, LON, &api_key),
+        other => forecast_weather(LAT, LON, &api_key, other),
+    };
+
+    if result.is_err() {
+        println!("Error while calling Open Weather Map API");
+    }
+}
+
+fn current_weather(lat: f32, lon: f32, api_key: &str) -> Result<(), Error> {
+    let url = format!("{OWM_URL}/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric");
+    let current_weather: CurrentWeather = reqwest::blocking::get(url)?.json()?;
+
+    println!(
+        "{} celcius - {}",
+        current_weather.main.temp, current_weather.weather[0].description
     );
 
-    println!("{}", url);
+    Ok(())
+}
 
-    let body = reqwest::blocking::get(url)?.text()?;
-
-    println!("body = {:?}", body);
-
-    //let args = Args::parse();
-
-    //println!("{}", args.days);
+fn forecast_weather(lat: f32, lon: f32, api_key: &str, days: u8) -> Result<(), Error> {
+    let cnt = days * 8;
+    let url =
+        format!("{OWM_URL}/weather?lat={lat}&lon={lon}&appid={api_key}&cnt={cnt}units=metric");
+    let forecast_weather: ForecastWeather = reqwest::blocking::get(url)?.json()?;
 
     Ok(())
 }
